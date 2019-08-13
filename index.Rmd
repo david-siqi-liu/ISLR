@@ -1,12 +1,7 @@
 ---
-title: "Chapter 3 - Linear Regression - Lab"
+title: "index"
 author: "David Liu"
 date: "13/08/2019"
-knit: (function(input_file, encoding) {
-  out_dir <- 'docs';
-  rmarkdown::render(input_file,
-      encoding=encoding,
-      output_file=file.path(dirname(input_file), out_dir, 'index.html'))})
 ---
 
 ```{r setup, include=FALSE}
