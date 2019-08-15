@@ -1,19 +1,387 @@
 ---
-title: "R Notebook"
-output: html_notebook
+title: "Chapter 4 - Classification"
+output:
+  html_document:
+    df_print: paged
 ---
 
-This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+## 4.6.1 - The Stock Market Data
 
-Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+Daily percentage returns for the S&P 500 stock index between 2001 and 2005.
 
 ```{r}
-plot(cars)
+library(ISLR)
+names(Smarket)
 ```
 
-Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
+**Format**
 
-When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file). 
+A data frame with 1250 observations on the following 9 variables.
 
-The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+ - `Year` - The year that the observation was recorded
+
+ - `Lag1` - Percentage return for previous day
+
+ - `Lag2`, `Lag3`, `Lag4`, `Lag5`
+
+ - `Volume` - Volume of shares traded (number of daily shares traded in billions)
+
+ - `Today` - Percentage return for today
+
+ - `Direction` - A factor with levels Down and Up indicating whether the market had a positive or negative return on a given day
+
+```{r}
+dim(Smarket)
+```
+
+```{r}
+summary(Smarket)
+```
+
+Correlation matrix of all quantitivate fields (i.e. except for `Direction`)
+
+```{r}
+cor(Smarket[,-9])
+```
+
+Little correlations between the `Lag` variables.
+
+Large correlation between `Year` and `Volume`.
+
+```{r}
+attach(Smarket)
+plot(x = Year, y = Volume)
+```
+
+`Volume` is increasing over time.
+
+## 4.6.2 - Logistic Regression
+
+Goal: predict `Direction` using `Lag` variables and `Volume`.
+
+Logistic regression: use `glm()` with `family = binomial`.
+
+```{r}
+glm.fits = glm(Direction ~ Lag1 + Lag2 + Lag3 + Lag4 + Lag5 + Volume,
+               data = Smarket,
+               family = binomial)
+
+summary(glm.fits)
+```
+
+Smallest p-value is with `Lag1` at 0.145, which is still quite large.
+
+Predict the training set and return the logit value.
+
+```{r}
+predict(glm.fits)[1:10]
+```
+
+Now, return the response `Pr(Y = 1 | X)`.
+
+```{r}
+glm.probs = predict(glm.fits, type = "response")
+
+glm.probs[1:10]
+```
+
+```{r}
+contrasts(Direction)
+```
+
+We need to convert the predcited probabilities into class labels.
+
+```{r}
+glm.pred = rep("Down", 1250) # Create a vector of class predictions, initialize with "Down"
+
+glm.pred[glm.probs > 0.5] = "Up" # Update using the predicted probabilities with 0.5 as the threshold
+```
+
+Confusion matrix.
+
+```{r}
+table(glm.pred, Direction)
+```
+
+Type I Error = FP Rate = FP / N.
+
+```{r}
+457 / (145 + 457)
+```
+
+Type II Error = FN Rate = FN / P.
+
+```{r}
+141 / (141 + 507)
+```
+
+`mean()` can be used to compute the fraction of days for which the prediction was correct.
+
+```{r}
+mean(glm.pred == Direction)
+
+(145 + 507) / 1250
+```
+
+This means that the `training` error rate is `1 - 52.16% = 47.84%`.
+
+Now, let's use 2005 as the `holdout` set instead.
+
+```{r}
+train = (Year < 2005) # A vector of Booleans
+
+Smarket.2005 = Smarket[!train, ] # Submatrix of Smarket
+
+dim(Smarket.2005)
+
+Direction.2005 = Direction[!train]
+```
+
+Now fit pre-2005 data and predict the 2005 data.
+
+```{r}
+glm.fits = glm(Direction ~ Lag1 + Lag2 + Lag3 + Lag4 + Lag5 + Volume,
+               data = Smarket,
+               family = binomial,
+               subset = train) # Using the `subset` parameter
+
+summary(glm.fits)
+```
+
+```{r}
+glm.probs = predict(glm.fits,
+                    Smarket.2005,
+                    type = "response")
+```
+
+Confusion matrix and error rate.
+
+```{r}
+glm.pred = rep("Down", 252) # Test set
+
+glm.pred[glm.probs > 0.5] = "Up"
+
+table(glm.pred, Direction.2005)
+```
+
+```{r}
+mean(glm.pred == Direction.2005)
+```
+
+```{r}
+mean(glm.pred != Direction.2005)
+```
+
+A test error rate of 52% is worse than random guessing!
+
+Now, try to predict use only `Lag1` and `Lag2`.
+
+```{r}
+glm.fits = glm(Direction ~ Lag1 + Lag2,
+               data = Smarket,
+               family = binomial,
+               subset = train)
+
+summary(glm.fits)
+```
+
+```{r}
+glm.probs = predict(glm.fits,
+                    Smarket.2005,
+                    type = "response")
+
+glm.pred = rep("Down", 252)
+
+glm.pred[glm.probs > 0.5] = "Up"
+
+table(glm.pred, Direction.2005)
+```
+
+```{r}
+mean(glm.pred == Direction.2005)
+```
+
+Slightly better results.
+
+To predict the probabilities associated with particular values of `Lag1` and `Lag2`.
+
+```{r}
+predict(glm.fits,
+        newdata = data.frame(Lag1 = c(1.5),
+                             Lag2 = c(-0.8)),
+        type = "response")
+```
+
+## 4.6.3 - Linear Discriminant Analysis
+
+The `lda()` function is part of the `MASS` library. Syntax is identical to that of `glm()` except for the absence of the `family` option.
+
+Let's only use one predictor - `Lag1`
+
+```{r}
+library(MASS)
+
+lda.fit = lda(Direction ~ Lag1,
+              data = Smarket,
+              subset = train)
+
+lda.fit # No more `summary()`
+```
+
+Prior probabilities: $\hat{\pi}_1$ = 0.491, $\hat{\pi}_2$ = 0.508. This means that, 49.2% of training observations corrspond to days during which the market went down.
+
+```{r}
+sum(Direction[train] == "Down") / length(Direction[train])
+```
+
+The `group means` will be used as estimtes for $\mu_1$ and $\mu_2$. They are the average of all the training observations from the *k*th class. These values suggest that, when the previous day's return is positive, market is likely to go down, and vice verse.
+
+```{r}
+mean(Smarket[(train) & (Direction == "Down"), ]$Lag1)
+```
+
+```{r}
+mean(Smarket[(train) & (Direction == "Up"), ]$Lag1)
+```
+
+The `coefficients of linear discriminants` provides the linear combination of `Lag1` that is used to form the LDA decision rule. If $0.813 \times Lag1$ is large, then the LDA classifier will predict a market decrease.
+
+`plot()` produces plots of the `linear discrimants`, obtained by computing $0.813 \times Lag1$ for each training observation.
+
+```{r}
+plot(lda.fit)
+```
+
+```{r}
+plot(Direction ~ Lag1, data = Smarket[train,])
+```
+
+`predict()` returns three elements:
+
+- `class` - LDA's prediction
+
+- `posterior` - a matrix whose *k*th column contains the posterior probability that the corresponding observation belongs to the *k*th class
+
+- `x` - linear discriminants
+
+```{r}
+lda.pred = predict(lda.fit, Smarket.2005)
+
+names(lda.pred)
+```
+
+```{r}
+lda.pred$class[1:15]
+```
+
+```{r}
+lda.pred$posterior[1:15]
+```
+
+Note that the posterior probability output by the model corresponds to the probability that the market will **decrease**, opposite of logistic regression.
+
+```{r}
+lda.pred$x[1:10]
+```
+
+Let's use the first observation as an example, where $x$ is -0.134.
+
+```{r}
+Smarket[!train,]$Lag1[1]
+```
+
+```{r}
+predict(lda.fit,
+        newdata = data.frame(Lag1 = c(-0.134)))
+```
+
+Since
+
+$$
+\hat{\delta}_k(x) = x \cdot \frac{\hat{\mu}_k}{\hat{\sigma}^2} - \frac{\hat{\mu}_k^2}{2\hat{\sigma}^2} + \log{(\hat{\pi}_k)}
+$$
+
+Where
+
+$$
+\hat{\mu}_k = \frac {1} {n_k} \sum_{i:y_i = k}^{}x_i
+$$
+
+$$
+\hat{\sigma}^2 = \frac {1} {n - K} \sum_{k = 1}^{K} \sum_{i:y_i = k}^{} (x_i - \hat{\mu}_k)^2
+$$
+
+$\hat{\mu}_1$ is the group means of the `Down` class, which equals to 0.04279022.
+
+$\hat{\mu}_2$ is the group means of `Up`, which equals to 0.03954635.
+
+$\hat{\sigma}^2$ is a weighted average of the sample varaince for each of the K classes
+
+```{r}
+var(Smarket[(train) & (Direction == "Down"), ]$Lag1)
+```
+
+```{r}
+var(Smarket[(train) & (Direction == "Up"), ]$Lag1)
+```
+
+```{r}
+length(Smarket[(train) & (Direction == "Down"),1])
+```
+
+```{r}
+length(Smarket[(train) & (Direction == "Up"),1])
+```
+
+$$
+\hat{\sigma}^2 = \frac {1.506623 \times 491 + 1.517006 \times 507} {491 + 507 - 2}
+\\
+\hat{\sigma}^2 = 1.514934
+$$
+
+```{r}
+(1.506623 * 491 + 1.517006 * 507) / (491 + 507 - 2)
+```
+
+Finally,
+
+$$
+\hat{\delta}_1(x) = -0.134 \cdot \frac{0.04279022}{1.514934} - \frac{0.04279022^2}{2 \times 1.514934} + \log{(0.491984)}
+\\
+\hat{\delta}_1(x) = -0.7136983
+$$
+```{r}
+-0.134 * (0.04279022 / 1.514934) - (0.04279022^2 / (2 * 1.514934)) + log(0.491984)
+```
+
+```{r}
+exp(-0.7136983)
+```
+
+
+$$
+\hat{\delta}_2(x) = -0.134 \cdot \frac{-0.03954635}{1.514934} - \frac{-0.03954635^2}{2 \times 1.514934} + \log{(0.508016)}
+\\
+\hat{\delta}_2(x) = -0.6742605
+$$
+
+```{r}
+-0.134 * (-0.03954635 / 1.514934) - ((-0.03954635)^2 / (2 * 1.514934)) + log(0.508016)
+```
+
+```{r}
+exp(-0.6742605)
+```
+
+Very close to what the package predicted. Since class 2 is larger, we assign the first observation to class 2 (i.e. `Up`).
+
+```{r}
+lda.class = lda.pred$class
+
+table(lda.class, Direction.2005)
+```
+
+```{r}
+mean(lda.class == Direction.2005)
+```
 
