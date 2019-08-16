@@ -1,0 +1,139 @@
+---
+title: "Chapter 5 - Resampling Methods"
+output: html_notebook
+---
+
+## 5.3.3 - k-Fold Cross-Validation
+
+```{r}
+library(ISLR)
+
+set.seed(647)
+
+attach(Auto)
+
+?Auto
+```
+
+`cv.glm()` function in the `boot` library is used to implement k-fold CV.
+
+`delta` in `cv.glm()` produces two versions of CV error:
+
+  - The first number is for the standard k-fold CV estimate
+  
+  - The second number is for a bias-corrected k-fold CV estimate
+
+```{r}
+library(boot)
+
+cv.error.10 = rep(0, 10) # Initialize the CV errors vector of length 10 with zeros
+
+for (i in 1:10) {
+  glm.fit = glm(mpg ~ poly(horsepower, i)) # Fit the model with ith order of polynomial
+  cv.error.10[i] = cv.glm(Auto, glm.fit, K = 10)$delta[1] # Grab the standard version
+}
+
+cv.error.10 # Each element contains the CV error of ith order of polynomial
+```
+
+## 5.3.4 - Bootstrap
+
+Performing bootstrap entails two steps:
+
+  - Create a function that computes the statstics of interest
+  
+  - Use the `boot()` function to perform the bootstrap
+
+### Portfolio
+
+Using the `Portfolio` data as an eample, we can create `apha.fn()` to estimate $\alpha$.
+
+```{r}
+alpha.fn = function(data, index) {
+  X = data$X[index]
+  Y = data$Y[index]
+  return ((var(Y) - cov(X, Y)) / (var(X) + var(Y) - 2 * cov(X, Y))) # Make sure to use () to wrap around the entire thing!
+}
+```
+
+```{r}
+alpha.fn(Portfolio, 1:100)
+```
+
+Use `sample()` to randomly select 100 observations from 1:100, with replacement.
+
+This is equivalent to constructing a new data set and re-computing $\hat{\alpha}$ based on the new data set.
+
+```{r}
+alpha.fn(Portfolio, sample(100, 100, replace = TRUE))
+```
+
+Now, let's do this R = 1,000 times.
+
+```{r}
+boot(Portfolio, alpha.fn, R = 1000)
+```
+
+Final output shows that $\hat{\alpha}$ = 0.5758 and $SE(\hat{\alpha})$ = 0.094.
+
+### Auto
+
+Let's try to estimate $SE(\hat{\beta_0})$ (intercept) and $SE(\hat{\beta_1})$ (slope) for a simple linear regression.
+
+First, create `boot.fn()` that:
+
+  - Takes in the `Auto` data set as well as a set of indecies for the observations, and
+  
+  - Returns the $\hat{\beta_0}$ and $\hat{\beta_1}$
+
+```{r}
+boot.fn = function(data, index) {
+  lm.fit = lm(mpg ~ horsepower, data = data, subset = index)
+  return (coef(lm.fit))
+}
+
+boot.fn(Auto, 1:392)
+```
+
+Next, use the `boot()` to compute the standard errors of 1,000 bootstrap estimates for $\hat{\beta_0}$ and $\hat{\beta_1}$.
+
+```{r}
+boot(Auto, boot.fn, R = 1000)
+```
+
+This indicates that:
+
+  - $SE(\hat{\beta_0})$ = 0.83
+  
+  - $SE(\hat{\beta_1})$ = 0.0072
+
+To compare these to the results from `summary()`.
+
+```{r}
+summary(lm(mpg ~ horsepower, data = Auto))$coef
+```
+
+Why are they so different?
+
+The standard formula (page 66) uses $\sigma^2$, the noise variance, which is estimated using RSS. This relies on the linear model being correct. Therefore, if non-linear relationship exists in the data, then the residuals from a linear fit will be inflated, and so will $\hat{\sigma}^2$.
+
+On the other hand, the bootstrap approach does not rely on this assumption, so it actually gives a more accurate estimate of the standard errors.
+
+If we were to do the same comparison, but with an additional 2nd-degree term, the results are much more similar.
+
+```{r}
+boot.fn = function(data, index) {
+  lm.fit = lm(mpg ~ horsepower + I(horsepower ^ 2), data = data, subset = index) # Additional 2nd-degree
+  return (coef(lm.fit))
+}
+
+boot.fn(Auto, 1:392)
+```
+
+```{r}
+boot(Auto, boot.fn, R = 1000)
+```
+
+```{r}
+summary(lm(mpg ~ horsepower + I(horsepower ^ 2), data = Auto))$coef
+```
