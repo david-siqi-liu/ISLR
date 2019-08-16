@@ -2030,6 +2030,103 @@ table(lda.class, Direction.2005)</code></pre>
 ##      Up     91 116</code></pre>
 <pre class="r"><code>mean(lda.class == Direction.2005)</code></pre>
 <pre><code>## [1] 0.5396825</code></pre>
+<p>Apply a 50% threshold, we can recreate the predictions</p>
+<pre class="r"><code>sum(lda.pred$posterior[,1] &gt;= 0.5) # Down</code></pre>
+<pre><code>## [1] 45</code></pre>
+<pre class="r"><code>sum(lda.pred$posterior[,1] &lt; 0.5) # Up</code></pre>
+<pre><code>## [1] 207</code></pre>
+<p>If we want to use another threshold (say 51%), then</p>
+<pre class="r"><code>sum(lda.pred$posterior[,1] &gt;= 0.51)</code></pre>
+<pre><code>## [1] 5</code></pre>
+</div>
+<div id="quadratic-discriminant-analysis" class="section level2">
+<h2>4.6.4 - Quadratic Discriminant Analysis</h2>
+<p>QDA is implemented using the <code>qda()</code> function, also part of the <code>MASS</code> library.</p>
+<pre class="r"><code>qda.fit = qda(Direction ~ Lag1 + Lag2,
+              data = Smarket,
+              subset = train)
+
+qda.fit</code></pre>
+<pre><code>## Call:
+## qda(Direction ~ Lag1 + Lag2, data = Smarket, subset = train)
+## 
+## Prior probabilities of groups:
+##     Down       Up 
+## 0.491984 0.508016 
+## 
+## Group means:
+##             Lag1        Lag2
+## Down  0.04279022  0.03389409
+## Up   -0.03954635 -0.03132544</code></pre>
+<p>Notice that QDA does **not* contain <code>coefficients of linear discriminants</code>, because it is not linear!</p>
+<pre class="r"><code>qda.class = predict(qda.fit, Smarket.2005)$class
+
+table(qda.class, Direction.2005)</code></pre>
+<pre><code>##          Direction.2005
+## qda.class Down  Up
+##      Down   30  20
+##      Up     81 121</code></pre>
+<pre class="r"><code>mean(qda.class == Direction.2005)</code></pre>
+<pre><code>## [1] 0.5992063</code></pre>
+<p>Better model performance than LDA.</p>
+</div>
+<div id="k-nearest-neighbors" class="section level2">
+<h2>4.6.5 - K-Nearest Neighbors</h2>
+<p><code>knn()</code> is part of the <code>class</code> library. It forms predictions using a single command with four inputs:</p>
+<ul>
+<li><p><code>train.X</code> - a matrix cnontaining the predictors associated with the training data</p></li>
+<li><p><code>test.X</code> - a matrix containing the predictors associated with the test data</p></li>
+<li><p><code>train.Direction</code> - a vector containing the class labels for the traning data</p></li>
+<li><p><code>K</code> - the number of nearest neighbors</p></li>
+</ul>
+<pre class="r"><code>library(class)</code></pre>
+<p>The <code>cbind()</code> (column bind) function is used to bind <code>Lag1</code> and <code>Lag2</code> together.</p>
+<pre class="r"><code>train.X = cbind(Lag1, Lag2)[train,]
+
+test.X = cbind(Lag1, Lag2)[!train,]
+
+train.Direction = Direction[train]
+
+# test.Direction is Direction.2005</code></pre>
+<pre class="r"><code>dim(train.X)</code></pre>
+<pre><code>## [1] 998   2</code></pre>
+<pre class="r"><code>train.X[1:5,]</code></pre>
+<pre><code>##        Lag1   Lag2
+## [1,]  0.381 -0.192
+## [2,]  0.959  0.381
+## [3,]  1.032  0.959
+## [4,] -0.623  1.032
+## [5,]  0.614 -0.623</code></pre>
+<p>We also need to set a random seed because if several observations are tied as nearest neighbor, R randomly breaks the tie.</p>
+<p>Let’s use <code>k</code> = 1 first.</p>
+<pre class="r"><code>set.seed(647)
+
+knn.pred = knn(train.X,
+               test.X,
+               train.Direction,
+               k = 1)
+
+table(knn.pred, Direction.2005)</code></pre>
+<pre><code>##         Direction.2005
+## knn.pred Down Up
+##     Down   43 58
+##     Up     68 83</code></pre>
+<pre class="r"><code>mean(knn.pred == Direction.2005)</code></pre>
+<pre><code>## [1] 0.5</code></pre>
+<p>Now use <code>k</code> = 3.</p>
+<pre class="r"><code>knn.pred = knn(train.X,
+               test.X,
+               train.Direction,
+               k = 3)
+
+table(knn.pred, Direction.2005)</code></pre>
+<pre><code>##         Direction.2005
+## knn.pred Down Up
+##     Down   48 55
+##     Up     63 86</code></pre>
+<pre class="r"><code>mean(knn.pred == Direction.2005)</code></pre>
+<pre><code>## [1] 0.531746</code></pre>
+<p>Slightly better results.</p>
 </div>
 
 

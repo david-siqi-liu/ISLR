@@ -385,3 +385,116 @@ table(lda.class, Direction.2005)
 mean(lda.class == Direction.2005)
 ```
 
+Apply a 50% threshold, we can recreate the predictions
+
+```{r}
+sum(lda.pred$posterior[,1] >= 0.5) # Down
+```
+
+```{r}
+sum(lda.pred$posterior[,1] < 0.5) # Up
+```
+
+If we want to use another threshold (say 51%), then
+
+```{r}
+sum(lda.pred$posterior[,1] >= 0.51)
+```
+
+## 4.6.4 - Quadratic Discriminant Analysis
+
+QDA is implemented using the `qda()` function, also part of the `MASS` library.
+
+```{r}
+qda.fit = qda(Direction ~ Lag1 + Lag2,
+              data = Smarket,
+              subset = train)
+
+qda.fit
+```
+
+Notice that QDA does **not* contain `coefficients of linear discriminants`, because it is not linear!
+
+```{r}
+qda.class = predict(qda.fit, Smarket.2005)$class
+
+table(qda.class, Direction.2005)
+```
+
+```{r}
+mean(qda.class == Direction.2005)
+```
+
+Better model performance than LDA.
+
+## 4.6.5 - K-Nearest Neighbors
+
+`knn()` is part of the `class` library. It forms predictions using a single command with four inputs:
+
+  - `train.X` - a matrix cnontaining the predictors associated with the training data
+  
+  - `test.X` - a matrix containing the predictors associated with the test data
+  
+  - `train.Direction` - a vector containing the class labels for the traning data
+  
+  - `K` - the number of nearest neighbors
+  
+```{r}
+library(class)
+```
+
+The `cbind()` (column bind) function is used to bind `Lag1` and `Lag2` together.
+
+```{r}
+train.X = cbind(Lag1, Lag2)[train,]
+
+test.X = cbind(Lag1, Lag2)[!train,]
+
+train.Direction = Direction[train]
+
+# test.Direction is Direction.2005
+```
+
+```{r}
+dim(train.X)
+```
+
+```{r}
+train.X[1:5,]
+```
+
+We also need to set a random seed because if several observations are tied as nearest neighbor, R randomly breaks the tie.
+
+Let's use `k` = 1 first.
+
+```{r}
+set.seed(647)
+
+knn.pred = knn(train.X,
+               test.X,
+               train.Direction,
+               k = 1)
+
+table(knn.pred, Direction.2005)
+```
+
+```{r}
+mean(knn.pred == Direction.2005)
+```
+
+Now use `k` = 3.
+
+```{r}
+knn.pred = knn(train.X,
+               test.X,
+               train.Direction,
+               k = 3)
+
+table(knn.pred, Direction.2005)
+```
+
+```{r}
+mean(knn.pred == Direction.2005)
+```
+
+Slightly better results.
