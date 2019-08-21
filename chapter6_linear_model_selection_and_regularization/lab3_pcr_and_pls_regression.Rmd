@@ -1,0 +1,136 @@
+---
+title: "Chapter 6 Lab 3"
+output: html_notebook
+---
+
+```{r}
+library(ISLR)
+
+attach(Hitters)
+
+Hitters = na.omit(Hitters)
+```
+
+## 6.7.1 - Principal Components Regression
+
+PCR can be performed using the `pcr()` function, part of the `pls` library.
+
+```{r}
+library(pls)
+
+set.seed(647)
+
+pcr.fit = pcr(Salary ~ .,
+              data = Hitters,
+              scale = TRUE, # Standardize predictors
+              validation = 'CV') # ten-fold cv for each possible value of M (number of PCs used)
+```
+
+```{r}
+summary(pcr.fit)
+```
+
+CV score is provided for PCs ranging from M = 0 (intercept only) to M = 19 (basically least square).
+
+Note that `pcr()` reports the *root mean squared error*, so to get the usual MSE, we need to square it.
+
+```{r}
+validationplot(pcr.fit,
+               val.type = 'MSEP') # Plot the MSE
+```
+
+We see that the lowest MSE occurs when M = 16, barely fewer than 19.
+
+We can also see that, when M = 1, MSE is roughly the same. This suggests that a small number of components might suffice.
+
+Now, let's performe PCR on the training data and evaluate its test set performance.
+
+```{r}
+set.seed(647)
+
+train = sample(1:nrow(x), nrow(x) / 2) # 50/50 split
+
+length(train)
+
+train[1:20]
+
+test = (-train)
+
+y.test = y[test]
+
+pcr.fit = pcr(
+  Salary ~ .,
+  data = Hitters,
+  subset = train,
+  scale = TRUE,
+  validation = 'CV'
+)
+
+validationplot(pcr.fit, val.type = 'MSEP')
+```
+
+```{r}
+summary(pcr.fit)
+```
+
+Lowest MSEP occurs at M = 17. Let's use M = 5.
+
+```{r}
+pcr.pred = predict(pcr.fit,
+                   x[test,],
+                   ncomp = 5)
+
+mean((pcr.pred - y.test) ^ 2)
+```
+
+Finally, fit on the entire data set.
+
+```{r}
+pcr.fit = pcr(y ~ x, scale = TRUE, ncomp = 5)
+
+summary(pcr.fit)
+```
+
+## 6.7.2 - Partial Least Squares
+
+PLS is done using the `plsr()` function.
+
+```{r}
+set.seed(647)
+
+pls.fit = plsr(
+  Salary ~ .,
+  data = Hitters,
+  subset = train,
+  scale = TRUE,
+  validation = "CV"
+)
+
+summary(pls.fit)
+```
+
+```{r}
+validationplot(pls.fit, val.type = "MSEP")
+```
+
+Lowest occurs with M = 12.
+
+```{r}
+pls.pred = predict(pls.fit, x[test,], ncomp = 12)
+
+mean((pls.pred - y.test) ^ 2)
+```
+
+MSE is higher than using PCR.
+
+Full data set, using M = 12.
+
+```{r}
+pls.fit = plsr(Salary ~ .,
+               data = Hitters,
+               scale = TRUE,
+               ncomp = 12)
+
+summary(pls.fit)
+```
+
