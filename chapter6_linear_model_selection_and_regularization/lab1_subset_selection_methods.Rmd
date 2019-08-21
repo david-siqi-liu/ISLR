@@ -1,0 +1,348 @@
+---
+title: "Chapter 6 Lab 1"
+output: html_notebook
+---
+
+## 6.5.1 - Best Subset Selection
+
+Predict `Salary` on the basis of various statistics with performance.
+
+`is.na()` can be used to identify missing obs.
+
+```{r}
+library(ISLR)
+
+attach(Hitters)
+
+names(Hitters)
+
+dim(Hitters)
+
+sum(is.na(Hitters$Salary))
+```
+
+`na.omit` can be used to remove all rows with missing values in *any* variable.
+
+```{r}
+Hitters = na.omit(Hitters)
+
+dim(Hitters)
+
+sum(is.na(Hitters))
+```
+
+`regsubsets()`, part of the `leaps` library performs best subset selection by identifying the best model that contains a given number of predictors, where `best` is quantified using RSS.
+
+```{r}
+library(leaps)
+
+regfit.full = regsubsets(Salary ~ .,
+                         Hitters,
+                         nvmax = 19) # Otherwise, default is 8
+
+reg.summary = summary(regfit.full)
+
+reg.summary
+```
+
+`*` means to be included in the corresponding model (e.g. best two-variable model contains `Hits` and `CRBI`).
+
+`summary()` also returns other statistics.
+
+```{r}
+names(reg.summary)
+```
+
+$R^2$ increases from 32% (one-variable) to 55% (nineteen-variable).
+
+```{r}
+reg.summary$rsq
+```
+
+$AdjR^2$ also increased.
+
+```{r}
+reg.summary$adjr2
+```
+
+Plot the statistics.
+
+```{r}
+par(mfrow=c(2,2))
+
+plot(reg.summary$rss,
+     xlab = "Number of Vars",
+     ylab = "RSS",
+     type = "l") # type = "l" is used to connect plotted points with lines
+
+plot(reg.summary$adjr2,
+     xlab = "Number of Vars",
+     ylab = "Adjusted Rsq",
+     type = "l") # type = "l" is used to connect plotted points with lines
+```
+
+`which.max()` can be used to identify the location of the max point of a vector.
+
+```{r}
+which.max(reg.summary$adjr2)
+```
+
+```{r}
+plot(reg.summary$adjr2,
+     xlab = "Number of Vars",
+     ylab = "Adjusted Rsq",
+     type = "l")
+
+points(11,
+       reg.summary$adjr2[11],
+       col = "red",
+       cex = 2,
+       pch = 20)
+```
+
+Now plot $C_p$.
+
+```{r}
+plot(reg.summary$cp,
+     xlab = "Number of Vars",
+     ylab = "Cp",
+     type = "l")
+
+which.min(reg.summary$cp)
+
+points(10,
+       reg.summary$cp[10],
+       col = "red",
+       cex = 2,
+       pch = 20)
+```
+
+Now plot $BIC$.
+
+```{r}
+plot(reg.summary$bic,
+     xlab = "Number of Vars",
+     ylab = "BIC",
+     type = "l")
+
+which.min(reg.summary$bic)
+
+points(6,
+       reg.summary$bic[6],
+       col = "red",
+       cex = 2,
+       pch = 20)
+```
+
+```{r}
+plot(regfit.full, scale="r2")
+```
+
+```{r}
+plot(regfit.full, scale="adjr2")
+```
+
+```{r}
+plot(regfit.full, scale="Cp")
+```
+
+```{r}
+plot(regfit.full, scale="bic")
+```
+
+Top row of each plot contains a black square for each variable selected according to the optimal model associated with that statistics.
+
+```{r}
+coef(regfit.full, 6)
+```
+
+## 6.5.2 - Forward and Backward Stepwise Selection
+
+```{r}
+regfit.fwd = regsubsets(Salary ~ .,
+                        Hitters,
+                        nvmax = 19,
+                        method = "forward")
+
+summary(regfit.fwd)
+```
+
+```{r}
+regfit.bwd = regsubsets(Salary ~ .,
+                        Hitters,
+                        nvmax = 19,
+                        method = "backward")
+
+summary(regfit.bwd)
+```
+
+1-6 models are identical. 7th is different.
+
+## 6.5.3 - Choosing Among Models Using the Validation Set Approach and Cross-Validation
+
+First, split into training set and test set.
+
+```{r}
+set.seed(647)
+
+train = sample(c(TRUE, FALSE),
+               nrow(Hitters),
+               rep = TRUE)
+
+test = (!train)
+
+length(train)
+
+test[1:10]
+```
+
+Apply `regsubsets()` to the training set to perform best subset selection.
+
+```{r}
+regfit.best = regsubsets(Salary ~ .,
+                         Hitters[train,],
+                         nvmax = 19)
+
+summary(regfit.best)
+```
+
+Now computer the validation set error for the best model, of each model size.
+
+```{r}
+test.mat = model.matrix(Salary ~ .,
+                        Hitters[test,]) # Build an "X" matrix from data
+
+dim(test.mat)
+```
+
+Run a for loop for each size *i* to extract the coefficients from regfit.best for the best model of size *i*.
+
+```{r}
+val.errors = rep(NA, 19)
+
+for (i in 1:19) {
+  coefi = coef(regfit.best, id = i) # Get the coefficients of the best model
+  pred = test.mat[, names(coefi)]%*%coefi # Multiple the coefficients with the columns and add together to form prediction
+  val.errors[i] = mean((Hitters$Salary[test] - pred) ^ 2)
+  
+  if (i == 5) {
+    print(coefi)
+    print(pred)
+    print(val.errors[i])
+  }
+}
+```
+
+```{r}
+val.errors
+```
+
+```{r}
+which.min(val.errors)
+```
+
+The best model contains eleven variables.
+
+```{r}
+coef(regfit.best, 11)
+```
+
+There's no `predict()` for `regsubsets()`. Create our own.
+
+```{r}
+predict.regsubsets = function(object, newdata, id, ...) {
+  form = as.formula(object$call[[2]])
+  mat = model.matrix(form, newdata)
+  coefi = coef(object, id = id)
+  xvars = names(coefi)
+  mat[, xvars] %*% coefi
+}
+```
+
+Finally, perform best subset selection on the full data set in order to obtain more accurate coefficient estimates.
+
+```{r}
+regfit.best = regsubsets(Salary ~ .,
+                         Hitters,
+                         nvmax = 19)
+
+coef(regfit.best, 11)
+```
+
+Now, we do cross-validation with k = 10 folds.
+
+```{r}
+k = 10
+
+set.seed(647)
+
+folds = sample(1 : k,
+               nrow(Hitters),
+               replace = TRUE)
+
+cv.errors = matrix(data = NA,
+                   nrow = k,
+                   ncol = 19,
+                   dimnames = list(NULL, paste(1 : 19)))
+```
+
+```{r}
+folds
+```
+
+```{r}
+cv.errors
+```
+
+In the *j*th fold, the elements of folds that equal *j* are in the test set, and the remainder are in the training set.
+
+We make our predictions for each model size, compute the test errors and store them in `cv.errors`.
+
+```{r}
+for (j in 1:k) {
+  best.fit = regsubsets(Salary ~ .,
+                        Hitters[folds != j,],
+                        nvmax = 19) # Anything that doesn't equal to j are in the training set
+  
+  for (i in 1:19) {
+    pred = predict.regsubsets(best.fit,
+                              Hitters[folds == j, ],
+                              id = i)
+    cv.errors[j, i] = mean((Hitters$Salary[folds == j] - pred) ^ 2)
+  }
+}
+```
+
+the *(i, j)*th element correspond to the test MSE for the *i*th cv fold for the best *j*-variable model.
+
+```{r}
+cv.errors
+```
+
+Now, use `apply()` on the amtrix to average over the columns, to get the cv error.
+
+```{r}
+mean.cv.errors = apply(cv.errors,
+                       2,
+                       mean)
+
+mean.cv.errors
+```
+
+```{r}
+par(mfrow = c(1, 1))
+
+plot(mean.cv.errors, type = 'b')
+```
+
+```{r}
+which.min(mean.cv.errors)
+```
+
+We see that cv selects a ten-variable model.
+
+```{r}
+reg.best = regsubsets(Salary ~ ., data = Hitters, nvmax = 19)
+
+coef(reg.best, 10)
+```
