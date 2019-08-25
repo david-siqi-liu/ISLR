@@ -1,0 +1,36 @@
+---
+title: "Chapter 7 Lab"
+output: html_notebook
+---
+
+```{r}
+library(ISLR)
+
+attach(Wage)
+```
+
+## 7.8.1 - Polynomial Regression and Step Functions
+
+```{r}
+fit = lm(wage ~ poly(age, 4),
+         data = Wage)
+
+coef(summary(fit))
+```
+
+Note that we need to use `I()` wrapper function, otherwise it won't work.
+
+```{r}
+fit2a = lm(wage ~ age + I(age ^ 2) + I(age ^ 3) + I(age ^ 4),
+           data = Wage)
+
+coef(summary(fit2a))
+
+fit2b = lm(wage ~ age + age ^ 2 + age ^ 3 + age ^ 4,
+           data = Wage)
+
+coef(summary(fit2b))
+```
+
+
+

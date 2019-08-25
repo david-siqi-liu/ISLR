@@ -1,0 +1,203 @@
+---
+title: "Chapter 8 Lab"
+output: html_notebook
+---
+
+## 8.3.1 - Fitting Classification Tree
+
+```{r}
+library(tree)
+```
+
+Classification - if `Sales` <= 8 or not
+```{r}
+library(ISLR)
+
+attach(Carseats)
+
+High = ifelse(Sales <= 8, "No", "Yes")
+
+length(High)
+
+Carseats = data.frame(Carseats, High) # Merge `High` with the rest of `Carseats`
+```
+
+Fit a classification tree
+```{r}
+tree.carseats = tree(High ~ . - Sales, data = Carseats) # All by `Sales`
+
+summary(tree.carseats)
+```
+
+Training error is 9%. For classification trees, *deviance* is reported as :
+
+$$
+D = -2\sum_{m}^{}\sum_{k}^{}n_{mk}\log{\hat{p}_{mk}}
+$$
+This is very similar to **entropy**:
+
+$$
+D = -\sum_{k}^{}\hat{p}_{mk}\log{\hat{p}_{mk}}
+$$
+
+where $n_{mk}$ is the number of obs in the *m*th terminal node that belong to the *k*th class, and $\hat{p}_{mk}$ is the proportion representation.
+
+If $\hat{p}_{mk}$ are all near zero or near one (i.e., pretty pure), when *D* takes on a small value.
+
+The *residual mean deviance* equals to:
+
+$$
+Residual Mean Deviance = \frac{ D }{ n - \vert{T_0}\vert}
+$$
+Where $n$ is the number of obs, and $T_0$ is the number of terminal nodes, which in this case is 27.
+
+```{r}
+plot(tree.carseats)
+text(tree.carseats, pretty = 0)
+```
+
+The most important indicator appears to be shelving location `ShelveLoc`.
+
+The below outputs:
+  - Split criterion (e.g. `Price < 92.5`)
+  - Number of obs in that branch (e.g. `46`, notice that below we've also got `Price > 92.5` with the remaining 269 obs)
+  - Deviance (e.g. `56.530`)
+  - Overall prediction for that branch (e.g. `Yes`)
+  - Fraction of obs that take on values of No/Yes (e.g. `(0.30435 0.69565)`)
+
+Terminal nodes are noted with `*`
+
+```{r}
+tree.carseats
+```
+
+Now let's evaluate the performance on a test set instead of training set
+
+```{r}
+set.seed(647)
+
+train = sample(1:nrow(Carseats), 200) # A list of 200 indices
+
+train[1:10]
+```
+
+```{r}
+Carseats.test = Carseats[-train,]
+
+High.test = High[-train]
+
+tree.carseats = tree(High ~ . - Sales, data = Carseats, subset = train)
+
+tree.pred = predict(tree.carseats, data = Carseats, type = "class")
+
+table(tree.pred, High.test)
+```
+
+Test error is therefore $(60 + 40) / 200 = 0.5$.
+
+Let's see if pruning will improve the result.
+
+```{r}
+cv.carseats = cv.tree(tree.carseats, FUN=prune.misclass) # We want the classification error to guide the pruning process, not the default Deviance
+cv.carseats
+```
+
+Note that the one with 9 terminal nodes has the lowest CV error rate (misclassification rate, not deviance).
+
+*k* is the cost-complexity parameter.
+
+```{r}
+par(mfrow=c(1,2))
+
+plot(cv.carseats$size, cv.carseats$dev, type = "b")
+
+plot(cv.carseats$k, cv.carseats$dev, type = "b")
+```
+
+Now apply `prune.misclass()` to prune the tree to obtain the nine-node tree.
+
+```{r}
+prune.carseats = prune.misclass(tree.carseats, best = 9)
+
+plot(prune.carseats)
+text(prune.carseats, pretty = 0)
+```
+
+```{r}
+tree.pred = predict(prune.carseats, data = Carseats, type = "class")
+
+table(tree.pred, High.test)
+```
+
+```{r}
+(62 + 34) / 200
+```
+
+Test misclassification rate dropped from 0.5 to 0.48.
+
+## 8.3.4 - Boosting
+
+Use the `gbm` packagge to fit boosted regression trees to the `Boston` data set.
+
+```{r}
+library(gbm)
+
+library(MASS)
+```
+
+```{r}
+set.seed(647)
+
+train = sample(1:nrow(Boston), nrow(Boston) / 2)
+
+boston.test = Boston[-train, "medv"]
+
+boost.boston = gbm(
+  medv ~ .,
+  data = Boston[train, ],
+  distribution = "gaussian",
+  n.trees = 5000,
+  interaction.depth = 4
+)
+
+summary(boost.boston)
+```
+
+`lstat` and `rm` are the most important varaibles.
+
+Let's produce the *partial dependence plots* for these varaibles, which illustrate the **marginal effect of the selected variables on the response after integrating out the other variables**.
+
+```{r}
+par(mfrow=c(1,2))
+
+plot(boost.boston, i = 'rm')
+
+plot(boost.boston, i = 'lstat')
+```
+
+Predict on the test set.
+
+```{r}
+yhat.boost = predict(boost.boston, newdata = Boston[-train,], n.trees = 5000)
+
+mean((yhat.boost - boston.test) ^ 2)
+```
+
+Lets try another value of shrinkage parameters $\lambda$ (default is 0.001).
+
+```{r}
+boost.boston = gbm(
+  medv ~ .,
+  data = Boston[train, ],
+  distribution = "gaussian",
+  n.trees = 5000,
+  interaction.depth = 4,
+  shrinkage = 0.2
+)
+
+yhat.boost = predict(boost.boston, newdata = Boston[-train,], n.trees = 5000)
+
+mean((yhat.boost - boston.test) ^ 2)
+```
+
+Slightly higher test MSE.
